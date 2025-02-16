@@ -45,8 +45,9 @@
 #define COSTAS_ARR_FREQ_STEP 100        // Frequency resolution of the costas array in Hz
 #define ARRAY {3, 1, 4, 0, 6, 5, 2}     // Costas array
 #define REF_CLK 125000000               // Reference clock frequency in Hz
-#define COSTAS_TRIGGER_PIN PB3          // Costas trigger pin
-#define TRIG_PIN PB4                    // Trigger pin
+#define COSTAS_TRIGGER_PIN PB2          // Costas trigger pin
+#define PSK_TRIG_PIN PB3                // Trigger pin
+#define COSTAS_TRIG_PIN PB4             // Costas trigger pin
 #define FQ_UD_PIN PB5                   // FQ_UD pin
 #define DATA_PIN PB6                    // Data pin
 #define CLOCK_PIN PB7                   // Clock pin
@@ -54,6 +55,7 @@
 #define PSK_TX_REQ_PIN PB9              // BPSK transmit request pin
 #define PSK_CLK_PIN PB10                // BPSK clock pin
 #define DATA_SIZE 8                     // number of bytes in the data array
+#define BEACON_ID_MSG "W2HAT COSTAS ARRAY BEACON" // Beacon ID message
 ////////////////////////////////////////////////////////////////
 // End of user configuration
 ////////////////////////////////////////////////////////////////
@@ -62,18 +64,19 @@
 void loadAD9850(uint64_t loadWord);                                   // Load the AD9850 with the word 
 void txCostasArray(uint32_t costasArray[], uint8_t costasArraySize);  // Transmit the Costas array
 void txPSK(uint8_t data[], uint8_t data_size);                        // Transmit PSK data
+void calculateArray(uint64_t CarrierFreq, uint32_t CostasFreqStep, uint8_t CostasArraySize, uint8_t Array[], uint32_t Offset); // Calculate the Costas array
 uint32_t calculateFrequencyWord(uint64_t frequency);                  // Calculate the frequency word
 uint8_t calculatePhaseWord(uint32_t phaseDegrees);                       // Calculate the phase word
 uint64_t calculateWaveform(uint64_t frequency, uint32_t phase);        // Calculate the full waveform word
-uint32_t* calculateArray(float CarrierFreq, uint32_t CostasFreqStep, uint8_t CostasArraySize, uint8_t Array[], uint32_t Offset); // Calculate the Costas array
+
 
 // Variable Definitions
 bool readyToLoad;
 uint8_t costasCounter = 0;
 uint32_t costasArray[COSTAS_ARR_SIZE];
+uint8_t arrayinit[COSTAS_ARR_SIZE] = ARRAY;
 uint64_t loadWord;
 uint8_t data[DATA_SIZE]; // Data to be transmitted
-
 // Function to load bits into AD9850
 void loadAD9850(uint64_t word) {
   for (int i = 0; i < 40; i++) {
@@ -101,14 +104,13 @@ uint64_t calculateWaveform(uint64_t frequency, uint32_t phase) {
 }
 
 // Function to calculate the Costas array
-uint32_t* calculateArray(float CarrierFreq, uint32_t CostasFreqStep, uint8_t CostasArraySize, uint8_t Array[], uint32_t Offset) {
+void calculateArray(uint64_t CarrierFreq, uint32_t CostasFreqStep, uint8_t CostasArraySize, uint8_t Array[], uint32_t Offset) {
   for (int i = 0; i < CostasArraySize; i++) {
     costasArray[i] = Array[i] * CostasFreqStep + CarrierFreq + Offset;  
   }
-  return costasArray;
 }
 uint8_t* calculateData(String stuff, uint8_t *data) {
-  for (int i = 0; i < DATA_SIZE; i++) {
+  for (int i = 0; i < (sizeof(stuff) < DATA_SIZE)?DATA_SIZE:sizeof(stuff); i++) {
     data[i] = stuff.charAt(i);
   }
   return data;
@@ -159,18 +161,41 @@ void txCostasArray(uint32_t costasArray[], uint8_t costasArraySize) {
 void setup() {
 
   // Initialize the AD9850
-  pinMode(TRIG_PIN, INPUT);
   pinMode(FQ_UD_PIN, INPUT);
+  pinMode(PSK_TX_REQ_PIN, OUTPUT);
+  pinMode(PSK_TRIG_PIN, INPUT);
+  pinMode(PSK_CLK_PIN, INPUT);
   pinMode(DATA_PIN, OUTPUT);
   pinMode(CLOCK_PIN, OUTPUT);
   pinMode(COSTAS_TX_REQ_PIN, OUTPUT);
+  pinMode(COSTAS_TRIGGER_PIN, INPUT);
+  pinMode(COSTAS_TRIG_PIN, INPUT);
+  Serial.begin(9600);
   loadAD9850((0ULL << 40));     // Load an empty word
   loadWord = 0;                 // Initialize the load word variable
   digitalWrite(COSTAS_TX_REQ_PIN, HIGH); // Enable costas clock
   while(!digitalRead(FQ_UD_PIN));        // Wait for the last word to be loaded
   digitalWrite(COSTAS_TX_REQ_PIN, LOW);  // Disable costas clock
+  calculateArray(CARRIER_FREQ, COSTAS_ARR_FREQ_STEP, COSTAS_ARR_SIZE, arrayinit, CARRIER_OFFSET);
+  Serial.println("AD9850 Initialized");
 }
 
 void loop() {
-
+  // Calculate the Costas array
+  if(digitalRead(COSTAS_TRIGGER_PIN)) {
+    Serial.println("Costas Triggered");
+    txCostasArray(costasArray, COSTAS_ARR_SIZE);
+    Serial.println("Costas Transmitted");
+    Serial.println("Costas Array first element:");
+    Serial.println(costasArray[0]);
+  }
+  // Calculate the data
+  if(digitalRead(PSK_TRIG_PIN)) {
+  Serial.println("PSK Triggered");
+  calculateData(BEACON_ID_MSG, data);
+  // Transmit the data
+  txPSK(data, DATA_SIZE);
+  Serial.println("PSK Transmitted:");
+  Serial.println(BEACON_ID_MSG);
+  }
 }
