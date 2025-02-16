@@ -38,33 +38,39 @@
 ////////////////////////////////////////////////////////////////
 // User configuration
 ////////////////////////////////////////////////////////////////
-#define CARRIER_FREQ 10.0 // "Carrier" (suppressed) frequency in MHz
-#define INITIAL_PHASE 0.0 // Initial phase in degrees
-#define COSTAS_ARR_SIZE 7 // Size of the Costas array
-#define COSTAS_ARR_FREQ_STEP 100 // Frequency resolution of the costas array in Hz
-#define ARRAY {3, 1, 4, 0, 6, 5, 2} // Costas array
+#define CARRIER_FREQ 10000000           // "Carrier" (suppressed) frequency in Hz
+#define CARRIER_OFFSET 1000             // Offset from the carrier frequency in Hz
+#define INITIAL_PHASE 0.0               // Initial phase in degrees
+#define COSTAS_ARR_SIZE 7               // Size of the Costas array
+#define COSTAS_ARR_FREQ_STEP 100        // Frequency resolution of the costas array in Hz
+#define ARRAY {3, 1, 4, 0, 6, 5, 2}     // Costas array
+#define REF_CLK 125000000               // Reference clock frequency in Hz
+#define TRIG_PIN PB4                    // Trigger pin
+#define FQ_UD_PIN PB5                   // FQ_UD pin
+#define DATA_PIN PB6                    // Data pin
+#define CLOCK_PIN PB7                   // Clock pin
+#define READY_PIN PB8                   // Ready signal pin
 ////////////////////////////////////////////////////////////////
 // End of user configuration
 ////////////////////////////////////////////////////////////////
 
-// Define pin connections
-#define TRIG_PIN PB4
-#define FQ_UD_PIN PB5
-#define DATA_PIN PB6
-#define CLOCK_PIN PB7
+// Function Prototypes
+void loadAD9850(uint64_t loadWord);                            // Load the AD9850 with the word 
+uint32_t calculateFrequencyWord(float frequencyMHz);           // Calculate the frequency word
+uint8_t calculatePhaseWord(float phaseDegrees);                // Calculate the phase word
+uint64_t calculateWaveform(uint64_t frequency, uint8_t phase); // Calculate the full waveform word
+uint32_t* calculateArray(float CarrierFreq, uint8_t CostasFreqStep, uint8_t CostasArraySize, uint8_t Array[], uint32_t Offset); // Calculate the Costas array
 
-// put function declarations here:
-void loadAD9850(uint64_t frequency, uint8_t phase);
-uint32_t calculateFrequencyWord(float frequencyMHz);
-uint8_t calculatePhaseWord(float phaseDegrees);
-uint64_t calculateWaveform(uint64_t frequency, uint8_t phase);
 
-// Define the reference clock frequency in MHz
-#define REF_CLK 125.0
+
+// Variable Definitions
+bool readyToLoad;
+uint8_t costasCounter = 0;
+uint32_t costasArray[COSTAS_ARR_SIZE];
+uint64_t loadWord;
 
 // Function to load bits into AD9850
 void loadAD9850(uint64_t word) {
-  // Load the 32-bit frequency word
   for (int i = 0; i < 40; i++) {
     digitalWrite(DATA_PIN, (word >> i) & 0x01);
     digitalWrite(CLOCK_PIN, HIGH);
@@ -75,8 +81,8 @@ void loadAD9850(uint64_t word) {
 }
 
 // Function to calculate the frequency word
-uint32_t calculateFrequencyWord(float frequencyMHz) {
-  return (uint64_t)((frequencyMHz * (1ULL << 32)) / REF_CLK);
+uint32_t calculateFrequencyWord(float frequency) {
+  return (uint64_t)((frequency * (1ULL << 32)) / REF_CLK);
 }
 uint8_t calculatePhaseWord(float phaseDegrees) {
   return (uint8_t)((phaseDegrees * (1ULL << 8)) / 360);
@@ -84,25 +90,34 @@ uint8_t calculatePhaseWord(float phaseDegrees) {
 uint64_t calculateWaveform(uint64_t frequency, uint8_t phase) {
   return (calculateFrequencyWord(frequency) << 8) | calculatePhaseWord(phase);
 }
-
-bool readyToLoad;
+uint32_t* calculateArray(float CarrierFreq, uint8_t CostasFreqStep, uint8_t CostasArraySize, uint8_t Array[], uint32_t Offset) {
+  for (int i = 0; i < CostasArraySize; i++) {
+    costasArray[i] = Array[i] * CostasFreqStep +  CarrierFreq + Offset;
+  }
+  return costasArray;
+}
 
 void setup() {
+
+  // Initialize the AD9850
   pinMode(TRIG_PIN, INPUT);
   pinMode(FQ_UD_PIN, INPUT);
   pinMode(DATA_PIN, OUTPUT);
   pinMode(CLOCK_PIN, OUTPUT);
-  readyToLoad = true;
+  pinMode(READY_PIN, OUTPUT);
+  loadAD9850((0ULL << 40));     // Load an empty word
+  loadWord = 0;
+  readyToLoad = false;
 }
 
 void loop() {
-
   if (readyToLoad && digitalRead(TRIG_PIN) == HIGH) {
     loadAD9850(loadWord);
     readyToLoad = false;
+    digitalWrite(READY_PIN, LOW);
   }
-
   if (digitalRead(FQ_UD_PIN) == HIGH) {
     readyToLoad = true;
+    digitalWrite(READY_PIN, HIGH);
   }
 }
