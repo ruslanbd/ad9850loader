@@ -38,13 +38,17 @@
 ////////////////////////////////////////////////////////////////
 // User configuration
 ////////////////////////////////////////////////////////////////
+// Parameters
 #define CARRIER_FREQ 10000000           // "Carrier" (suppressed) frequency in Hz
 #define CARRIER_OFFSET 1000             // Offset from the carrier frequency in Hz
 #define INITIAL_PHASE 0                 // Initial phase in degrees (0-180)
 #define COSTAS_ARR_SIZE 7               // Size of the Costas array
 #define COSTAS_ARR_FREQ_STEP 100        // Frequency resolution of the costas array in Hz
 #define ARRAY {3, 1, 4, 0, 6, 5, 2}     // Costas array
+#define DATA_SIZE 25                     // number of bytes in the data array
+#define BEACON_ID_MSG "W2HAT COSTAS ARRAY BEACON" // Beacon ID message
 #define REF_CLK 125000000               // Reference clock frequency in Hz
+// Pin definitions
 #define COSTAS_TRIGGER_PIN PB2          // Costas trigger pin
 #define PSK_TRIG_PIN PB3                // Trigger pin
 #define COSTAS_TRIG_PIN PB4             // Costas trigger pin
@@ -54,8 +58,6 @@
 #define COSTAS_TX_REQ_PIN PB8           // Costas transmit request pin
 #define PSK_TX_REQ_PIN PB9              // BPSK transmit request pin
 #define PSK_CLK_PIN PB10                // BPSK clock pin
-#define DATA_SIZE 8                     // number of bytes in the data array
-#define BEACON_ID_MSG "W2HAT COSTAS ARRAY BEACON" // Beacon ID message
 ////////////////////////////////////////////////////////////////
 // End of user configuration
 ////////////////////////////////////////////////////////////////
@@ -110,7 +112,7 @@ void calculateArray(uint64_t CarrierFreq, uint32_t CostasFreqStep, uint8_t Costa
   }
 }
 uint8_t* calculateData(String stuff, uint8_t *data) {
-  for (int i = 0; i < (sizeof(stuff) < DATA_SIZE)?DATA_SIZE:sizeof(stuff); i++) {
+  for (int i = 0; i < (sizeof(stuff) > DATA_SIZE)?DATA_SIZE:sizeof(stuff); i++) {
     data[i] = stuff.charAt(i);
   }
   return data;
