@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": "../../../../platformio"
+		},
+		{
+			"name": "ad9850loader",
+			"path": "."
+		}
+	],
+	"settings": {}
+}

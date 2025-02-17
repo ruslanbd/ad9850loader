@@ -58,6 +58,8 @@
 #define COSTAS_TX_REQ_PIN PB8           // Costas transmit request pin
 #define PSK_TX_REQ_PIN PB9              // BPSK transmit request pin
 #define PSK_CLK_PIN PB10                // BPSK clock pin
+#define COSTAS_UNLOCK_PIN PB11          // Costas unlock pin
+#define PSK_UNLOCK_PIN PB12             // BPSK unlock pin
 ////////////////////////////////////////////////////////////////
 // End of user configuration
 ////////////////////////////////////////////////////////////////
@@ -190,6 +192,9 @@ void loop() {
     Serial.println("Costas Transmitted");
     Serial.println("Costas Array first element:");
     Serial.println(costasArray[0]);
+    Serial.println("Transmission locked!");
+    while(!digitalRead(COSTAS_UNLOCK_PIN));
+    Serial.println("Transmission unlocked!");
   }
   // Calculate the data
   if(digitalRead(PSK_TRIG_PIN)) {
@@ -199,5 +204,8 @@ void loop() {
   txPSK(data, DATA_SIZE);
   Serial.println("PSK Transmitted:");
   Serial.println(BEACON_ID_MSG);
+  Serial.println("Transmission locked!");
+  while(!digitalRead(PSK_UNLOCK_PIN));
+  Serial.println("Transmission unlocked!");
   }
 }
