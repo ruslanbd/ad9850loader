@@ -12,17 +12,23 @@
 //
 //  The AD9850 is loaded by an STM32F103C8T6 MCU, which is a 
 //  helper core to the onboard GW2AR FPGA. It also provides
-//  a serial interface to the GPSDO unit for timestamping.
+//  a serial interface to the GPSDO unit for timestamping (TODO!).
 //  The timestamps are transmitted the next second after the
-//  beacon is triggered. Timestamps are DPSK modulated. 
-//  Timestamp transmission and format is WIP.
+//  beacon is triggered. Timestamps are BPSK modulated.
+//   
+//  (Currently implemented is a simple beacon ID once per 10
+//  minutes, as per FCC regulations.)
 //
 //  The DDS frequency output is triggered by an FPGA which is 
 //  programmed to provide precise timing based on an external
 //  GPSDO.
-//  This code loads a word into the AD9850 when the trigger 
+//
+//  This code loads a word into the AD9850 when a trigger 
 //  pin is high. It then waits for the FQ_UD pin to go high 
 //  before loading another word (to prevent race conditions).
+//  After the last word is loaded, the trigger pin is set low and
+//  the MCU enters a NOP loop until unlock pin is set high.
+//  Then, the proces is repeated.
 //  
 //  The Costas array and its parameters, as well as pin 
 //  definitions, are defined in the user configuration section.
