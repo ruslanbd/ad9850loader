@@ -45,21 +45,21 @@
 #define COSTAS_ARR_SIZE 7               // Size of the Costas array
 #define COSTAS_ARR_FREQ_STEP 100        // Frequency resolution of the costas array in Hz
 #define ARRAY {3, 1, 4, 0, 6, 5, 2}     // Costas array
-#define DATA_SIZE 25                     // number of bytes in the data array
+#define DATA_SIZE 25                    // number of bytes in the data array
 #define BEACON_ID_MSG "W2HAT COSTAS ARRAY BEACON" // Beacon ID message
 #define REF_CLK 125000000               // Reference clock frequency in Hz
 // Pin definitions
-#define COSTAS_TRIGGER_PIN PB2          // Costas trigger pin
+#define COSTAS_CLK_PIN PB14             // Costas clock pin
+#define COSTAS_TRIG_PIN PB5             // Costas trigger pin
 #define PSK_TRIG_PIN PB3                // Trigger pin
-#define COSTAS_TRIG_PIN PB4             // Costas trigger pin
-#define FQ_UD_PIN PB5                   // FQ_UD pin
-#define DATA_PIN PB6                    // Data pin
-#define CLOCK_PIN PB7                   // Clock pin
-#define COSTAS_TX_REQ_PIN PB8           // Costas transmit request pin
-#define PSK_TX_REQ_PIN PB9              // BPSK transmit request pin
-#define PSK_CLK_PIN PB10                // BPSK clock pin
-#define COSTAS_UNLOCK_PIN PB11          // Costas unlock pin
-#define PSK_UNLOCK_PIN PB12             // BPSK unlock pin
+#define FQ_UD_PIN PA8                   // FQ_UD pin
+#define DATA_PIN PA0                    // Data pin
+#define CLOCK_PIN PB0                   // Clock pin
+#define COSTAS_TX_REQ_PIN PB9           // Costas transmit request pin
+#define PSK_TX_REQ_PIN PB7              // BPSK transmit request pin
+#define PSK_CLK_PIN PB12                // BPSK clock pin
+#define COSTAS_UNLOCK_PIN PA12          // Costas unlock pin
+#define PSK_UNLOCK_PIN PA10             // BPSK unlock pin
 ////////////////////////////////////////////////////////////////
 // End of user configuration
 ////////////////////////////////////////////////////////////////
@@ -150,12 +150,12 @@ void txPSK(uint8_t data[], uint8_t data_size) {
 void txCostasArray(uint32_t costasArray[], uint8_t costasArraySize) {
   digitalWrite(COSTAS_TX_REQ_PIN, HIGH); // Start transmission
   for (int i = 0; i < costasArraySize; i++) { // Transmit the Costas array
-    while(!digitalRead(COSTAS_TRIGGER_PIN)); // Wait for the trigger
+    while(!digitalRead(COSTAS_CLK_PIN)); // Wait for the trigger
     loadWord = calculateWaveform(costasArray[i], calculatePhaseWord(INITIAL_PHASE));
     loadAD9850(loadWord);
     while(!digitalRead(FQ_UD_PIN));     // Wait for the word to be loaded
   }
-  while(!digitalRead(COSTAS_TRIGGER_PIN));  // Wait for the trigger
+  while(!digitalRead(COSTAS_CLK_PIN));  // Wait for the trigger
   loadWord = calculateWaveform(calculateFrequencyWord(0), calculatePhaseWord(0)); 
   loadAD9850(loadWord);                 // Load an empty word        
   while(!digitalRead(FQ_UD_PIN));       // Wait for the word to be loaded
@@ -172,8 +172,7 @@ void setup() {
   pinMode(DATA_PIN, OUTPUT);
   pinMode(CLOCK_PIN, OUTPUT);
   pinMode(COSTAS_TX_REQ_PIN, OUTPUT);
-  pinMode(COSTAS_TRIGGER_PIN, INPUT);
-  pinMode(COSTAS_TRIG_PIN, INPUT);
+  pinMode(COSTAS_CLK_PIN, INPUT);
   Serial.begin(9600);
   loadAD9850((0ULL << 40));     // Load an empty word
   loadWord = 0;                 // Initialize the load word variable
@@ -186,7 +185,7 @@ void setup() {
 
 void loop() {
   // Calculate the Costas array
-  if(digitalRead(COSTAS_TRIGGER_PIN)) {
+  if(digitalRead(COSTAS_TRIG_PIN)) {
     Serial.println("Costas Triggered");
     txCostasArray(costasArray, COSTAS_ARR_SIZE);
     Serial.println("Costas Transmitted");
