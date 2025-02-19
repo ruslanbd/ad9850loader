@@ -46,7 +46,6 @@
 ////////////////////////////////////////////////////////////////
 // Uncomment the following line to enable debugging
 //#define DEBUG
-////////////////////////////////////////////////////////////////
 // Parameters
 #define CARRIER_FREQ 1000000           // "Carrier" (suppressed) frequency in Hz
 #define CARRIER_OFFSET 1000             // Offset from the carrier frequency in Hz
@@ -67,7 +66,7 @@
 #define COSTAS_TX_REQ_PIN PB9           // Costas transmit request pin
 #define PSK_TX_REQ_PIN PB7              // BPSK transmit request pin
 #define PSK_CLK_PIN PA8                 // BPSK clock pin
-#define COSTAS_UNLOCK_PIN PA12          // Costas unlock pin
+#define COSTAS_UNLOCK_PIN PA15          // Costas unlock pin
 #define PSK_UNLOCK_PIN PA10             // BPSK unlock pin
 ////////////////////////////////////////////////////////////////
 // End of user configuration
@@ -132,7 +131,7 @@ static uint8_t bitIndexLoad = 0;            // Bit index for loading word
 static uint64_t currentWordLoad = 0;
 static bool isLoading = false;
 static bool wordLoaded = false;
-
+static bool clockd = true;
 // Static variables for txPSK function
 static enum {
   PSK_IDLE,
@@ -198,18 +197,20 @@ void loadAD9850(uint64_t word) {
 
   // Process one bit at a time
   if (isLoading && bitIndexLoad < 40) {
-    if ((currentWordLoad >> bitIndexLoad) & 0x01) {
-      GPIOA->BSRR = (1 << (DATA_PIN & 0xF));
+    if(!clockd) {
+      digitalWrite(CLOCK_PIN, HIGH);
+      clockd = true;
     } else {
-      GPIOA->BRR = (1 << (DATA_PIN & 0xF));
+      digitalWrite(CLOCK_PIN, LOW);
+      digitalWrite(DATA_PIN, (currentWordLoad >> bitIndexLoad) & 0x01);
+      clockd = false;
+      bitIndexLoad++;
     }
-    GPIOB->BSRR = (1 << (CLOCK_PIN & 0xF));
-    GPIOB->BRR = (1 << (CLOCK_PIN & 0xF));
-    bitIndexLoad++;
   } else {
     // Transmission complete
     isLoading = false;
     wordLoaded = true;
+    clockd = true;
   }
 }
 
@@ -497,7 +498,10 @@ void setup() {
   loadAD9850((0ULL << 40));     // Load an empty word
   loadWord = 0;                 // Initialize the load word variable
   digitalWrite(COSTAS_TX_REQ_PIN, HIGH); // Enable costas clock
-  while(!digitalRead(FQ_UD_PIN)){};        // Wait for the last word to be loaded
+  while(!wordLoaded){
+    loadAD9850(loadWord);                 // Load the empty word
+  };        // Wait for the last word to be loaded
+  wordLoaded = false;
   digitalWrite(COSTAS_TX_REQ_PIN, LOW);  // Disable costas clock
   calculateArray(CARRIER_FREQ, COSTAS_ARR_FREQ_STEP, COSTAS_ARR_SIZE, arrayinit, CARRIER_OFFSET);
   calculateData(BEACON_ID_MSG, data); 
