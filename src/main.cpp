@@ -107,7 +107,12 @@ uint64_t calculateWaveform(uint64_t frequency, uint32_t phase);
 /**
  * @brief Calculate the data to be transmitted.
  */
-void calculateData(String stuff, uint8_t *data);                 
+void calculateData(String stuff, uint8_t *data);    
+/**
+ * @brief Idle loop, for improved readability of code not involved in active transmission
+ */             
+void idleLoop();
+
 ////////////////////////////////////////////////////////////////
 // End of function prototypes
 ////////////////////////////////////////////////////////////////
@@ -130,11 +135,11 @@ static bool wordLoaded = false;
 
 // Static variables for txPSK function
 static enum {
-  IDLE,
-  START_TX,
-  DATA_TX,
-  END_TX
-} pskState = IDLE;
+  PSK_IDLE,
+  PSK_START_TX,
+  PSK_DATA_TX,
+  PSK_END_TX
+} pskState = PSK_IDLE;
 static int byteIndexPSK = 0;
 static int bitIndexPSK = 0;
 static int preambleCount = 0;
@@ -142,13 +147,20 @@ static bool lockPSK = false;
 
 // Static variables for txCostasArray function
 static enum {
-  IDLE,
-  TRANSMITTING,
-  FINAL_WORD,
-  END_TX
-} costasState = IDLE;
+  COSTAS_IDLE,
+  COSTAS_TRANSMITTING,
+  COSTAS_FINAL_WORD,
+  COSTAS_END_TX
+} costasState = COSTAS_IDLE;
 static int arrayIndexCostas = 0;
 static bool lockCostas = false;
+
+// Static variables for main loop
+static enum {
+  LOOP_IDLE,
+  COSTAS_ACTIVE,
+  PSK_ACTIVE
+} loopState = LOOP_IDLE;
 
 ////////////////////////////////////////////////////////////////
 // End of variable definitions
@@ -313,18 +325,18 @@ void txPSK(uint8_t data[], uint8_t data_size) {
   static uint64_t waveformCache[2] = {0};
 
   switch(pskState) {
-    case IDLE:
+    case PSK_IDLE:
       if (digitalRead(PSK_TRIG_PIN) && !lockPSK) {
         digitalWrite(PSK_TX_REQ_PIN, HIGH);
         byteIndexPSK = 0;
         bitIndexPSK = 0;
         preambleCount = 0;
-        pskState = START_TX;
+        pskState = PSK_START_TX;
         waveformCache[0] = calculateWaveform(CARRIER_FREQ, calculatePhaseWord(0));
         waveformCache[1] = calculateWaveform(CARRIER_FREQ, calculatePhaseWord(180));
       }
       break;
-    case START_TX:
+    case PSK_START_TX:
       if (digitalRead(PSK_CLK_PIN)) {
         if (preambleCount < 8 && !wordLoaded) {
           loadWord = waveformCache[0];
@@ -336,11 +348,11 @@ void txPSK(uint8_t data[], uint8_t data_size) {
           }
         } else {
           preambleCount = 0;
-          pskState = DATA_TX;
+          pskState = PSK_DATA_TX;
         }
       }
       break;
-    case DATA_TX:
+    case PSK_DATA_TX:
       if (digitalRead(PSK_CLK_PIN)) {
         if (byteIndexPSK < data_size) {
           if (bitIndexPSK < 8 && !wordLoaded) {
@@ -357,21 +369,21 @@ void txPSK(uint8_t data[], uint8_t data_size) {
           }
         } else {
           byteIndexPSK = 0;
-          pskState = END_TX;
+          pskState = PSK_END_TX;
         }
       }
       break;
-    case END_TX:
+    case PSK_END_TX:
       if (digitalRead(PSK_CLK_PIN)) {
         loadWord = calculateWaveform(0, 0);
         loadAD9850(loadWord);
         if (digitalRead(FQ_UD_PIN)) {
-          pskState = IDLE;
+          pskState = PSK_IDLE;
         }
       }
       break;
     default:
-      pskState = IDLE;
+      pskState = PSK_IDLE;
       break;
   }
 }
@@ -400,15 +412,15 @@ void txPSK(uint8_t data[], uint8_t data_size) {
 
 void txCostasArray(uint32_t costasArray[], uint8_t costasArraySize) {
   switch(costasState) {
-    case IDLE:
+    case COSTAS_IDLE:
       if (digitalRead(COSTAS_TRIG_PIN) && !lockCostas) {
         digitalWrite(COSTAS_TX_REQ_PIN, HIGH);
         arrayIndexCostas = 0;
-        costasState = TRANSMITTING;
+        costasState = COSTAS_TRANSMITTING;
       }
       break;
 
-    case TRANSMITTING:
+    case COSTAS_TRANSMITTING:
       if (arrayIndexCostas < costasArraySize) {
         if (digitalRead(COSTAS_CLK_PIN) && !wordLoaded) {
           loadWord = calculateWaveform(costasArray[arrayIndexCostas], calculatePhaseWord(INITIAL_PHASE));
@@ -421,29 +433,29 @@ void txCostasArray(uint32_t costasArray[], uint8_t costasArraySize) {
         }
       }
       else {
-        costasState = FINAL_WORD;
+        costasState = COSTAS_FINAL_WORD;
       }
       break;
 
-    case FINAL_WORD:
+    case COSTAS_FINAL_WORD:
       if (digitalRead(COSTAS_CLK_PIN) && !wordLoaded) {
         loadWord = calculateWaveform(0, 0);
         loadAD9850(loadWord);
       }
       else if (wordLoaded && digitalRead(FQ_UD_PIN)) {
-        costasState = END_TX;
+        costasState = COSTAS_END_TX;
       }
       break;
 
-    case END_TX:
+    case COSTAS_END_TX:
       digitalWrite(COSTAS_TX_REQ_PIN, LOW);
       wordLoaded = false;
-      costasState = IDLE;
+      costasState = COSTAS_IDLE;
       lockCostas = true;
       break;
 
     default:
-      costasState = IDLE;
+      costasState = COSTAS_IDLE;
       break;
   }
 }
@@ -531,13 +543,9 @@ void setup() {
  * - BEACON_ID_MSG: Message ID for the beacon.
  * - DEBUG: Macro to enable debug logging.
  */
-static enum {
-  LOOP_IDLE,
-  COSTAS_ACTIVE,
-  PSK_ACTIVE
-} loopState = LOOP_IDLE;
 
 void loop() {
+  idleLoop();
   switch(loopState) {
 
     case LOOP_IDLE:
@@ -584,4 +592,11 @@ void loop() {
       loopState = LOOP_IDLE;
       break;
   }
+}
+
+/**
+ * @brief Idle loop, for improved readability of code not involved in active transmission
+ */
+void idleLoop() {
+  // Add any code here that should run continuously. TODO: Add GPSDO timestamping.
 }
