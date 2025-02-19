@@ -109,9 +109,9 @@ uint64_t calculateWaveform(uint64_t frequency, uint32_t phase);
  */
 void calculateData(String stuff, uint8_t *data);    
 /**
- * @brief Idle loop, for improved readability of code not involved in active transmission
- */             
-void idleLoop();
+ * @brief Beacon state machine
+ */
+void beaconTick();
 
 ////////////////////////////////////////////////////////////////
 // End of function prototypes
@@ -500,6 +500,7 @@ void setup() {
   while(!digitalRead(FQ_UD_PIN)){};        // Wait for the last word to be loaded
   digitalWrite(COSTAS_TX_REQ_PIN, LOW);  // Disable costas clock
   calculateArray(CARRIER_FREQ, COSTAS_ARR_FREQ_STEP, COSTAS_ARR_SIZE, arrayinit, CARRIER_OFFSET);
+  calculateData(BEACON_ID_MSG, data); 
   #ifdef DEBUG
     Serial.begin(9600);
     Serial.println("AD9850 Initialized");
@@ -507,45 +508,52 @@ void setup() {
 }
 
 /**
- * @brief Main loop function that handles the transmission of Costas and PSK signals.
+ * @brief Main loop function. Calls the beacon state machine.
  * 
- * This function continuously checks for trigger signals to initiate the transmission
- * of Costas and PSK data. It performs the following tasks:
- * 
- * - Checks if the Costas trigger pin is high. If triggered:
- *   - Logs the trigger event (if DEBUG is defined).
- *   - Transmits the Costas array.
- *   - Logs the transmission status and array details (if DEBUG is defined).
- *   - Waits for the Costas unlock pin to go high.
- *   - Logs the unlock event (if DEBUG is defined).
- * 
- * - Checks if the PSK trigger pin is high. If triggered:
- *   - Logs the trigger event (if DEBUG is defined).
- *   - Calculates the data to be transmitted.
- *   - Transmits the PSK data.
- *   - Logs the transmission status and data details (if DEBUG is defined).
- *   - Waits for the PSK unlock pin to go high.
- *   - Logs the unlock event (if DEBUG is defined).
- * 
- * The function relies on the following external functions and variables:
- * - digitalRead(pin): Reads the state of the specified pin.
- * - txCostasArray(array, size): Transmits the Costas array.
- * - txPSK(data, size): Transmits the PSK data.
- * - calculateData(message, data): Calculates the data to be transmitted.
- * - COSTAS_TRIG_PIN: Pin number for Costas trigger.
- * - COSTAS_UNLOCK_PIN: Pin number for Costas unlock.
- * - PSK_TRIG_PIN: Pin number for PSK trigger.
- * - PSK_UNLOCK_PIN: Pin number for PSK unlock.
- * - costasArray: Array containing Costas data.
- * - COSTAS_ARR_SIZE: Size of the Costas array.
- * - data: Array containing PSK data.
- * - DATA_SIZE: Size of the PSK data array.
- * - BEACON_ID_MSG: Message ID for the beacon.
- * - DEBUG: Macro to enable debug logging.
+ * This function is the main loop of the program. Nothing much to add.
+ * TODO: Add serial communication with GPSDO for timestamping.
  */
 
 void loop() {
-  idleLoop();
+  beaconTick();
+}
+
+/**
+  * @brief Beacon state machine 
+  * 
+  * This function implements a simple state machine to handle the beacon operation.
+  * The state machine is triggered by the Costas and PSK trigger pins and performs
+  * the following actions:
+  *
+  * - When the Costas trigger pin is high, the state machine enters the COSTAS_ACTIVE state.
+  *   The state machine then transmits the Costas array and waits for the Costas unlock pin to go high.
+  *   Once the unlock pin is high, the state machine returns to the IDLE state. 
+  *
+  * - When the PSK trigger pin is high, the state machine enters the PSK_ACTIVE state.
+  *   The state machine calculates the data to be transmitted, transmits the data using PSK modulation,
+  *   and waits for the PSK unlock pin to go high. Once the unlock pin is high, the state machine returns to the IDLE state.
+  *
+  * - In the IDLE state, the state machine checks for trigger signals and transitions to the appropriate state.
+  *
+  * The state machine is implemented using a switch-case statement and a global variable to track the current state.
+  * The state machine is called in the main loop function.
+  *
+  * @note The state machine relies on the following external functions and variables:
+  *       - txCostasArray(array, size): Transmits the Costas array.
+  *       - txPSK(data, size): Transmits the PSK data.
+  *       - calculateData(message, data): Calculates the data to be transmitted.
+  *       - COSTAS_TRIG_PIN: Pin number for Costas trigger.
+  *       - COSTAS_UNLOCK_PIN: Pin number for Costas unlock.
+  *       - PSK_TRIG_PIN: Pin number for PSK trigger.
+  *       - PSK_UNLOCK_PIN: Pin number for PSK unlock.
+  *       - costasArray: Array containing Costas data.
+  *       - COSTAS_ARR_SIZE: Size of the Costas array.
+  *       - data: Array containing PSK data.
+  *       - DATA_SIZE: Size of the PSK data array.
+  *       - BEACON_ID_MSG: Message ID for the beacon.
+  *       - DEBUG: Macro to enable debug logging.
+  */
+ void beaconTick() {
   switch(loopState) {
 
     case LOOP_IDLE:
@@ -592,11 +600,4 @@ void loop() {
       loopState = LOOP_IDLE;
       break;
   }
-}
-
-/**
- * @brief Idle loop, for improved readability of code not involved in active transmission
- */
-void idleLoop() {
-  // Add any code here that should run continuously. TODO: Add GPSDO timestamping.
-}
+ }
